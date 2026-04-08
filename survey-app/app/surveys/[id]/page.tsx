@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/use-fetch";
 import { useMutation } from "@/hooks/use-mutation";
 import type { SurveyDetail, AnswerPayload } from "@/types/survey";
+import { QuestionCard } from "@/components/survey/question-card";
+import { ProgressBar } from "@/components/ui/progress-bar";
 
 export default function TakeSurveyPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +15,7 @@ export default function TakeSurveyPage() {
   const { mutate, loading: submitting, error: submitError } = useMutation(`/api/surveys/${id}/submit`);
 
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   if (loading) {
@@ -42,6 +45,14 @@ export default function TakeSurveyPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  const goToNextQuestion = () => {
+    setCurrentQuestionIndex((prev) => Math.min(prev + 1, survey.questions.length - 1));
+  };
+
+  const goToPreviousQuestion = () => {
+    setCurrentQuestionIndex((prev) => Math.max(prev - 1, 0));
+  };
+
   const handleSubmit = async () => {
     setValidationError(null);
 
@@ -63,6 +74,10 @@ export default function TakeSurveyPage() {
   };
 
   const displayError = validationError ?? submitError;
+  const hasQuestions = survey.questions.length > 0;
+  const currentQuestion = hasQuestions ? survey.questions[currentQuestionIndex] : null;
+  const isFirstQuestion = currentQuestionIndex === 0;
+  const isLastQuestion = currentQuestionIndex === survey.questions.length - 1;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
@@ -77,69 +92,62 @@ export default function TakeSurveyPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-6">
-        {survey.questions.map((q, idx) => (
-          <div key={q.id} className="card">
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              {idx + 1}. {q.text}
-              {q.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </label>
-
-            {q.type === "multiple_choice" && q.options ? (
-              <div className="flex flex-col gap-2">
-                {q.options.map((option) => (
-                  <label key={option} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name={`q-${q.id}`}
-                      value={option}
-                      checked={answers[q.id] === option}
-                      onChange={() => setAnswer(q.id, option)}
-                      className="accent-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">{option}</span>
-                  </label>
-                ))}
-              </div>
-            ) : q.type === "rating" ? (
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setAnswer(q.id, String(n))}
-                    className={`w-10 h-10 rounded-md border text-sm font-medium transition-colors ${
-                      answers[q.id] === String(n)
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <textarea
-                rows={3}
-                className="input"
-                placeholder="Type your answer..."
-                value={answers[q.id] ?? ""}
-                onChange={(e) => setAnswer(q.id, e.target.value)}
-              />
-            )}
+      {hasQuestions ? (
+        <>
+          <div className="mb-6">
+            <ProgressBar
+              current={currentQuestionIndex + 1}
+              total={survey.questions.length}
+              label="Question progress"
+            />
           </div>
-        ))}
-      </div>
 
-      <div className="mt-8 flex items-center gap-4">
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="btn-primary"
-        >
-          {submitting ? "Submitting..." : "Submit Survey"}
-        </button>
-        <button onClick={() => router.push("/surveys")} className="btn-secondary">
+          <QuestionCard
+            question={currentQuestion}
+            index={currentQuestionIndex}
+            value={answers[currentQuestion.id] ?? ""}
+            onChange={(value) => setAnswer(currentQuestion.id, value)}
+            showValidation={Boolean(validationError)}
+          />
+        </>
+      ) : (
+        <div className="card">
+          <p className="text-gray-600">This survey has no questions yet.</p>
+        </div>
+      )}
+
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        {hasQuestions && (
+          <button
+            type="button"
+            onClick={goToPreviousQuestion}
+            disabled={isFirstQuestion}
+            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+        )}
+
+        {hasQuestions && !isLastQuestion ? (
+          <button
+            type="button"
+            onClick={goToNextQuestion}
+            className="btn-primary"
+          >
+            Next
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="btn-primary"
+          >
+            {submitting ? "Submitting..." : "Submit Survey"}
+          </button>
+        )}
+
+        <button type="button" onClick={() => router.push("/surveys")} className="btn-secondary">
           Cancel
         </button>
       </div>
